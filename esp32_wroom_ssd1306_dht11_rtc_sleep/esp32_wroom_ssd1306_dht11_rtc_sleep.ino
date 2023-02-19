@@ -14,8 +14,11 @@
 #define DHTPIN 4    // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT11   // DHT 11
 
-#define TOUCH1 2
-#define TOUCH2 15
+#define TOUCH1 15
+#define TOUCH2 13
+
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  60        /* Time ESP32 will go to sleep (in seconds) */
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -29,16 +32,30 @@ ESP32Time rtc(0);  // offset in seconds GMT+1
 
 RTC_DATA_ATTR unsigned long bootCount = 0;
 
+RTC_DATA_ATTR unsigned long clock_H = 16;
+RTC_DATA_ATTR unsigned long clock_M = 36;
+RTC_DATA_ATTR bool svegliaAttiva = true;
+
 DHT dht(DHTPIN, DHTTYPE);
 
-const int threshold = 50;
+const int threshold = 30;
+
+//BUZZER
+int atn = 162;
+int atn2 = 50;
+
+int freq = 2000;
+int channel = 0;
+int resolution = 8;
 
 //stato: 0 = inattivo, solo rtc
 //stato: 1 = mostra ora
 //stato: 2 = mostra data
 //stato: 3 = meteo
-//stato: 4 = imposta ora
-//stato: 5 = imposta data
+//stato: 4 = sveglia
+//stato: 10 = imposta ora
+//stato: 11 = imposta data
+//stato: 11 = imposta sveglia
 int stato = 1;
 
 int stato_tmp = stato;
@@ -48,6 +65,46 @@ int en_display = 26;
 float h = 0;
 float t = 0;
 
+int mySongNotes[] =  {740, 831, 932, 1109, 1245, 1480, 1661, 1865,  2217, 740, 831,   932, 1109, 1245,  1480, 1661, 1865, 2489, 2489, 2489};
+int mySongDelay1[] = {atn, atn, atn*2, atn, atn, atn*2, atn,  atn, atn*2, atn, atn, atn*2,  atn,  atn, atn*2,  atn,  atn,  atn*2,  atn,  atn};
+int mySongDelay2[] = {atn2, atn2, atn2,atn2,atn2,atn2, atn2, atn2,  atn2, atn2,atn2, atn2, atn2, atn2,  atn2, atn2, atn2, atn2, atn2, atn2 };
+
+bool svegliaSuona = true;
+
+//infinity 16x8
+const uint8_t PROGMEM sveglia[]{
+B00001100, B01100000,
+B00011011, B10110000,
+B00010100, B01010000,
+B00001001, B00100000,
+B00001001, B10100000,
+B00001001, B00100000,
+B00000100, B01000000,
+B00001011, B10100000
+};
+
+const uint8_t PROGMEM clock16[]{
+B00000000, B00000000,
+B00000000, B00000000,
+B00001100, B01100000,
+B00011000, B00110000,
+B00110111, B11011000,
+B00101000, B00101000,
+B00010001, B00010000,
+B00100001, B00001000,
+B00100001, B00001000,
+B00100001, B00001000,
+B00100000, B10001000,
+B00100000, B01001000,
+B00010000, B00010000,
+B00001000, B00100000,
+B00010111, B11010000,
+B00000000, B00000000
+};
+
+
+
+
 
 void callback(){
   //placeholder callback function
@@ -55,11 +112,15 @@ void callback(){
 
 void setup(){
   if(bootCount == 0)
-    rtc.setTime(0, 35, 16, 10, 2, 2023);   //s:m:h g/m/y
+    rtc.setTime(30, 35, 16, 10, 2, 2023);   //s:m:h g/m/y
   ++bootCount;
 
   //pinMode(en_display, OUTPUT);
   //Wire.begin(5, 4); //se cambio da sda 21 e scl 22
+  ledcSetup(channel, freq, resolution);
+  ledcAttachPin(18, channel);
+  ledcWrite(channel, 127);
+  ledcWriteTone(channel, 0);
 
   dht.begin();
   //Serial.begin(115200);
@@ -67,6 +128,7 @@ void setup(){
     //Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
   }
+  display.setRotation(2);
   display.display();
   display.setTextColor(SSD1306_WHITE);
   display.clearDisplay();
@@ -82,6 +144,7 @@ void setup(){
 
   //Configure Touchpad as wakeup source
   esp_sleep_enable_touchpad_wakeup();
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 
   //pinMode(en_display, INPUT);
 
@@ -101,6 +164,12 @@ void orologio() {
     float h_tmp = dht.readHumidity();
     float t_tmp = dht.readTemperature();
 
+    //SVEGLIA
+    if(rtc.getHour(true) == clock_H && rtc.getMinute() == clock_M && svegliaAttiva)
+      stato = 13;
+    else
+      svegliaSuona = true;
+
     if (!isnan(h_tmp) && !isnan(t_tmp)) {
       h = h_tmp;
       t = t_tmp;
@@ -119,7 +188,7 @@ void orologio() {
       }
 
       if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
-        stato_tmp = 4;
+        stato_tmp = 10;
       }
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
@@ -139,7 +208,7 @@ void orologio() {
       }
 
       if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
-        stato_tmp = 5;
+        stato_tmp = 11;
       }
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
         stato = stato_tmp;
@@ -152,11 +221,11 @@ void orologio() {
       
 
       if(touchRead(TOUCH1) < threshold){
-        stato_tmp = 0;
+        stato_tmp = 4;
       }
 
       if(touchRead(TOUCH2) < threshold){
-        stato_tmp = 0;
+        stato_tmp = 4;
       }
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
         stato = stato_tmp;
@@ -164,15 +233,62 @@ void orologio() {
     }
 
     if(stato == 4){
+
+      printClock();
+
+      if(touchRead(TOUCH1) < threshold){
+        stato_tmp = 0;
+      }
+
+      if(touchRead(TOUCH2) < threshold){
+        stato_tmp = 0;
+      }
+
+      if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
+        stato_tmp = 12;
+      }
+
+      if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
+        stato = stato_tmp;
+      }
+    }
+
+    if(stato == 10){
       setTime();
       stato = 1;
       stato_tmp = 1;
     }
 
-    if(stato == 5){
+    if(stato == 11){
       setDate();
       stato = 2;
       stato_tmp = 2;
+    }
+
+    if(stato == 12){
+      setClock();
+      stato = 4;
+      stato_tmp = 4;
+    }
+
+    if(stato == 13){
+      printTime();
+      if(svegliaSuona){
+        //for (int i=0;i< i < (sizeof(mySongNotes) / sizeof(mySongNotes[0])) -1; i++ ){
+        for (int i=0;i <18; i++ ){
+          if(touchRead(TOUCH1) < threshold || touchRead(TOUCH2) < threshold){
+            svegliaSuona = false;
+          }
+          if(svegliaSuona){
+            ledcWriteTone(channel, mySongNotes[i]);
+            delay(mySongDelay1[i]);  
+            ledcWriteTone(channel, 0);
+            delay(mySongDelay2[i]);
+          }
+        }
+      }
+      stato = 1;
+      stato_tmp = 1;
     }
     delay(100);
   }
@@ -195,7 +311,7 @@ void setTime(){
 
   while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
     display.clearDisplay();
-    display.setCursor(16, 0);
+    display.setCursor(16, 10);
     display.setTextSize(2);
     display.print("Set Time");
 
@@ -225,7 +341,7 @@ void setTime(){
 
   while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
     display.clearDisplay();
-    display.setCursor(16, 0);
+    display.setCursor(16, 10);
     display.setTextSize(2);
     display.print("Set Time");
 
@@ -255,6 +371,106 @@ void setTime(){
   rtc.setTime(0, tmp_min, tmp_h, rtc.getDay(), rtc.getMonth() + 1, rtc.getYear());
 }
 
+void setClock(){
+  int tmp_h = clock_H;
+  int tmp_min = clock_M;
+
+  waitRelease();
+
+  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+    display.clearDisplay();
+    display.setCursor(14, 10);
+    display.setTextSize(2);
+    display.print("Set Clock");
+
+    display.setCursor(18, 30);
+    display.setTextSize(4);
+    display.setTextWrap(false);
+    display.print("H:");
+
+    if(touchRead(TOUCH2) < threshold){
+      tmp_h++;
+      if(tmp_h>23)
+        tmp_h = 0;
+    }
+
+    if(touchRead(TOUCH1) < threshold){
+      tmp_h--;
+      if(tmp_h < 0)
+        tmp_h = 23;
+    }
+    display.print(tmp_h);
+    display.display();
+
+    delay(200);
+  }
+
+  waitRelease();
+
+  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+    display.clearDisplay();
+    display.setCursor(14, 10);
+    display.setTextSize(2);
+    display.print("Set Clock");
+
+    display.setCursor(18, 30);
+    display.setTextSize(4);
+    display.print("M:");
+    if(touchRead(TOUCH2) < threshold){
+      tmp_min++;
+      if(tmp_min>59)
+        tmp_min = 0;
+    }
+
+    if(touchRead(TOUCH1) < threshold){
+      tmp_min--;
+      if(tmp_min < 0)
+        tmp_min = 59;
+    }
+
+    display.print(tmp_min);
+    display.display();
+
+    delay(200);
+  }
+
+  waitRelease();
+
+  int clock_EN = svegliaAttiva;
+  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+    display.clearDisplay();
+    display.setCursor(14, 10);
+    display.setTextSize(2);
+    display.print("Set Clock");
+
+    display.setCursor(24, 30);
+    display.setTextSize(4);
+    if(touchRead(TOUCH2) < threshold){
+      clock_EN = clock_EN *-1 +1;
+    }
+
+    if(touchRead(TOUCH1) < threshold){
+      clock_EN = clock_EN *-1 +1;
+    }
+
+    if(clock_EN)
+      display.print("ON");
+    else
+      display.print("OFF");
+
+    display.display();
+
+    delay(200);
+  }
+
+  waitRelease();
+
+  clock_H = tmp_h;
+  clock_M = tmp_min;
+
+  svegliaAttiva = clock_EN;
+}
+
 void setDate(){
   int tmp_y = rtc.getYear();
   int tmp_m = rtc.getMonth() + 1;
@@ -264,7 +480,7 @@ void setDate(){
 
   while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
     display.clearDisplay();
-    display.setCursor(16, 0);
+    display.setCursor(16, 10);
     display.setTextSize(2);
     display.print("Set Date");
 
@@ -293,7 +509,7 @@ void setDate(){
 
   while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
     display.clearDisplay();
-    display.setCursor(16, 0);
+    display.setCursor(16, 10);
     display.setTextSize(2);
     display.print("Set Date");
 
@@ -321,7 +537,7 @@ void setDate(){
 
   while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
     display.clearDisplay();
-    display.setCursor(16, 0);
+    display.setCursor(16, 10);
     display.setTextSize(2);
     display.print("Set Date");
 
@@ -353,9 +569,32 @@ void setDate(){
 
 void printTime(){
   display.clearDisplay();
+  if(svegliaAttiva && svegliaSuona)
+    display.drawBitmap(56, 0, clock16, 16, 16, WHITE);
+  
   display.setTextSize(4);
-  display.setCursor(6,20);
+  display.setCursor(6,24);
   display.print(rtc.getTime("%H:%M"));
+  display.display();
+}
+
+void printClock(){
+  display.clearDisplay();
+  display.setCursor(30, 10);
+  display.setTextSize(2);
+  display.print("Clock");
+
+  display.setTextSize(3);
+  display.setCursor(16,40);
+  if(clock_H <10)
+    display.print("0");
+    
+  display.print(clock_H);
+  display.print(":");
+  if(clock_M <10)
+    display.print("0");
+    
+  display.print(clock_M);
   display.display();
 }
 
@@ -363,7 +602,7 @@ void printDate(){
   display.clearDisplay();
   display.setTextSize(2);
   int centra = (128 - (rtc.getTime("%A").length() * 12)) /2;
-  display.setCursor(centra,10);  
+  display.setCursor(centra,16);  
   display.print(rtc.getTime("%A"));
 
   display.setTextSize(2);
@@ -375,7 +614,7 @@ void printDate(){
 void printTemp() {
   display.clearDisplay();
   display.setTextSize(2);
-  display.setCursor(20,0);
+  display.setCursor(20,6);
   display.print("Weather");
   display.setTextSize(2);
   display.setCursor(20,26);
@@ -401,4 +640,3 @@ void printPres() {
   display.print(dht.readHumidity());
   display.display();
 }
-
