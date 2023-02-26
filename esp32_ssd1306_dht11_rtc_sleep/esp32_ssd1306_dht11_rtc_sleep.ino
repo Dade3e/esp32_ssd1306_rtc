@@ -59,7 +59,7 @@ void callback(){
 
 void setup(){
   if(bootCount == 0)
-    rtc.setTime(0, 11, 16, 3, 2, 2023);
+    rtc.setTime(0, 18, 14, 5, 2, 2023); // sec, min, h, day, mounth, year
   ++bootCount;
 
   //pinMode(en_display, OUTPUT);

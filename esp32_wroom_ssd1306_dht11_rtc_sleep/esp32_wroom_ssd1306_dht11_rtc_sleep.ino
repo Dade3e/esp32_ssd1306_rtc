@@ -11,11 +11,16 @@
 
 #include "DHT.h"
 
+#include <forcedClimate.h>
+
 #define DHTPIN 4    // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT11   // DHT 11
 
 #define TOUCH1 15
 #define TOUCH2 13
+#define TOUCH3 12
+
+#define LED 14
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  60        /* Time ESP32 will go to sleep (in seconds) */
@@ -27,18 +32,20 @@
 #define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+ForcedClimate climateSensor = ForcedClimate();
+
 
 ESP32Time rtc(0);  // offset in seconds GMT+1
 
 RTC_DATA_ATTR unsigned long bootCount = 0;
 
-RTC_DATA_ATTR unsigned long clock_H = 16;
+RTC_DATA_ATTR unsigned long clock_H = 15;
 RTC_DATA_ATTR unsigned long clock_M = 36;
 RTC_DATA_ATTR bool svegliaAttiva = true;
 
 DHT dht(DHTPIN, DHTTYPE);
 
-const int threshold = 30;
+const int threshold = 55;
 
 //BUZZER
 int atn = 162;
@@ -122,7 +129,12 @@ void setup(){
   ledcWrite(channel, 127);
   ledcWriteTone(channel, 0);
 
+  pinMode(LED, OUTPUT);
+  digitalWrite(LED, LOW);
+
   dht.begin();
+
+  climateSensor.begin();
   //Serial.begin(115200);
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     //Serial.println(F("SSD1306 allocation failed"));
@@ -193,6 +205,26 @@ void orologio() {
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
         stato = stato_tmp;
+      }
+
+      int clock_EN = svegliaAttiva;
+      if(touchRead(TOUCH3) < threshold){
+        clock_EN = clock_EN *-1 +1;
+        display.clearDisplay();
+        display.setCursor(14, 10);
+        display.setTextSize(2);
+        display.print("Set Clock");
+
+        display.setCursor(24, 30);
+        display.setTextSize(4);
+        if(clock_EN)
+          display.print("ON");
+        else
+          display.print("OFF");
+
+        display.display();
+        svegliaAttiva = clock_EN;
+        delay(1000);
       }
     }
 
@@ -570,10 +602,10 @@ void setDate(){
 void printTime(){
   display.clearDisplay();
   if(svegliaAttiva && svegliaSuona)
-    display.drawBitmap(56, 0, clock16, 16, 16, WHITE);
+    display.drawBitmap(50, 0, clock16, 16, 16, WHITE);
   
   display.setTextSize(4);
-  display.setCursor(6,24);
+  display.setCursor(0,28);
   display.print(rtc.getTime("%H:%M"));
   display.display();
 }
@@ -585,7 +617,7 @@ void printClock(){
   display.print("Clock");
 
   display.setTextSize(3);
-  display.setCursor(16,40);
+  display.setCursor(16,36);
   if(clock_H <10)
     display.print("0");
     
@@ -602,11 +634,11 @@ void printDate(){
   display.clearDisplay();
   display.setTextSize(2);
   int centra = (128 - (rtc.getTime("%A").length() * 12)) /2;
-  display.setCursor(centra,16);  
+  display.setCursor(centra-6,16);  
   display.print(rtc.getTime("%A"));
 
   display.setTextSize(2);
-  display.setCursor(18,40);
+  display.setCursor(14,40);
   display.print(rtc.getTime("%d/%m/%y"));
   display.display();
 }
@@ -617,13 +649,18 @@ void printTemp() {
   display.setCursor(20,6);
   display.print("Weather");
   display.setTextSize(2);
-  display.setCursor(20,26);
-  display.print(t);
+  display.setCursor(10,26);
+  //display.print(t);
+  display.print(climateSensor.getTemperatureCelcius());
   display.print(" C");
   display.setTextSize(2);
-  display.setCursor(20,46);
-  display.print(h);
-  display.print(" %");
+  display.setCursor(6,46);
+  //display.print(h);
+  float p = climateSensor.getPressure();
+  if(p < 1000)
+    display.setCursor(10,46);
+  display.print(p);
+  display.print("hPa");
   display.display();
   
 }
@@ -637,6 +674,7 @@ void printPres() {
 
   display.setTextSize(3);
   display.setCursor(0,40);
-  display.print(dht.readHumidity());
+  //display.print(dht.readHumidity());
+  display.print(climateSensor.getPressure());
   display.display();
 }
