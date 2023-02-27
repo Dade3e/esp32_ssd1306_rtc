@@ -42,6 +42,7 @@ RTC_DATA_ATTR unsigned long bootCount = 0;
 RTC_DATA_ATTR unsigned long clock_H = 15;
 RTC_DATA_ATTR unsigned long clock_M = 36;
 RTC_DATA_ATTR bool svegliaAttiva = true;
+RTC_DATA_ATTR unsigned long tempo_rimanente = 24*60*60;
 
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -145,18 +146,19 @@ void setup(){
   display.setTextColor(SSD1306_WHITE);
   display.clearDisplay();
 
-  delay(500);
+  //delay(500);
   stato = 1;
 //Setup interrupt on Touch Pad 3 (GPIO15)
   touchAttachInterrupt(TOUCH1, callback, threshold);
-  touchAttachInterrupt(15, callback, threshold);
+  touchAttachInterrupt(TOUCH2, callback, threshold);
+  touchAttachInterrupt(TOUCH3, callback, threshold);
 
   orologio();
   //spengo monitor con transistor
 
   //Configure Touchpad as wakeup source
   esp_sleep_enable_touchpad_wakeup();
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_sleep_enable_timer_wakeup(tempo_rimanente * uS_TO_S_FACTOR);
 
   //pinMode(en_display, INPUT);
 
@@ -186,63 +188,49 @@ void orologio() {
       h = h_tmp;
       t = t_tmp;
     }
-
     if(stato == 1){
 
       printTime();
 
       if(touchRead(TOUCH1) < threshold){
-        stato_tmp = 2;
+        stato_tmp = 0;
       }
 
       if(touchRead(TOUCH2) < threshold){
         stato_tmp = 2;
       }
 
-      if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
+      if(touchRead(TOUCH3) < threshold){
         stato_tmp = 10;
       }
 
-      if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
+      if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
+        stato_tmp = 20;
+      }
+
+      if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
       }
 
-      int clock_EN = svegliaAttiva;
-      if(touchRead(TOUCH3) < threshold){
-        clock_EN = clock_EN *-1 +1;
-        display.clearDisplay();
-        display.setCursor(14, 10);
-        display.setTextSize(2);
-        display.print("Set Clock");
-
-        display.setCursor(24, 30);
-        display.setTextSize(4);
-        if(clock_EN)
-          display.print("ON");
-        else
-          display.print("OFF");
-
-        display.display();
-        svegliaAttiva = clock_EN;
-        delay(1000);
-      }
+      
     }
 
     if(stato == 2){
       printDate();
 
       if(touchRead(TOUCH1) < threshold){
-        stato_tmp = 3;
+        stato_tmp = 1;
       }
 
       if(touchRead(TOUCH2) < threshold){
         stato_tmp = 3;
       }
 
-      if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
+      if(touchRead(TOUCH3) < threshold){
         stato_tmp = 11;
       }
-      if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
+
+      if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
       }
     }
@@ -253,7 +241,7 @@ void orologio() {
       
 
       if(touchRead(TOUCH1) < threshold){
-        stato_tmp = 4;
+        stato_tmp = 2;
       }
 
       if(touchRead(TOUCH2) < threshold){
@@ -269,18 +257,22 @@ void orologio() {
       printClock();
 
       if(touchRead(TOUCH1) < threshold){
-        stato_tmp = 0;
+        stato_tmp = 3;
       }
 
       if(touchRead(TOUCH2) < threshold){
         stato_tmp = 0;
       }
 
-      if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
+      if(touchRead(TOUCH3) < threshold){
         stato_tmp = 12;
       }
 
-      if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
+      if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
+        stato_tmp = 20;
+      }
+
+      if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
       }
     }
@@ -322,15 +314,53 @@ void orologio() {
       stato = 1;
       stato_tmp = 1;
     }
+
+    if(stato == 20){
+      int clock_EN = svegliaAttiva;
+      clock_EN = clock_EN *-1 +1;
+      display.clearDisplay();
+      display.setCursor(30, 10);
+      display.setTextSize(2);
+      display.print("Allarm");
+
+      display.setCursor(40, 32);
+      display.setTextSize(3);
+      if(clock_EN)
+        display.print("ON");
+      else
+        display.print("OFF");
+
+      display.display();
+      svegliaAttiva = clock_EN;
+      delay(1000);
+      stato = 1;
+      stato_tmp = 1;
+    }
     delay(100);
   }
+  int tmp_h = rtc.getHour(true);
+  int tmp_min = rtc.getMinute();
+  
+  if(clock_H < tmp_h){
+    tmp_h = tmp_h + 24 - clock_H;
+  }else{
+    tmp_h = tmp_h - clock_H;
+  }
+
+  if(clock_M < tmp_min){
+    tmp_min = tmp_min + 24 - clock_M;
+  }else{
+    tmp_min = tmp_min - clock_M;
+  }
+
+  tempo_rimanente = ((tmp_h * 60) + tmp_min ) * 60;
   //digitalWrite(en_display, LOW);
   display.ssd1306_command(SSD1306_DISPLAYOFF);
-
+  
 }
 
 void waitRelease(){
-  while (touchRead(TOUCH1) < threshold || touchRead(TOUCH2) < threshold){
+  while (touchRead(TOUCH1) < threshold || touchRead(TOUCH2) < threshold || touchRead(TOUCH3) < threshold){
     delay(50);
   }
 }
@@ -341,7 +371,7 @@ void setTime(){
 
   waitRelease();
 
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(16, 10);
     display.setTextSize(2);
@@ -371,7 +401,7 @@ void setTime(){
 
   waitRelease();
 
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(16, 10);
     display.setTextSize(2);
@@ -409,7 +439,7 @@ void setClock(){
 
   waitRelease();
 
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(14, 10);
     display.setTextSize(2);
@@ -439,7 +469,7 @@ void setClock(){
 
   waitRelease();
 
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(14, 10);
     display.setTextSize(2);
@@ -469,7 +499,7 @@ void setClock(){
   waitRelease();
 
   int clock_EN = svegliaAttiva;
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(14, 10);
     display.setTextSize(2);
@@ -510,7 +540,7 @@ void setDate(){
 
   waitRelease();
 
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(16, 10);
     display.setTextSize(2);
@@ -539,7 +569,7 @@ void setDate(){
 
   waitRelease();
 
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(16, 10);
     display.setTextSize(2);
@@ -567,7 +597,7 @@ void setDate(){
 
   waitRelease();
 
-  while(touchRead(TOUCH1) > threshold || touchRead(TOUCH2) > threshold ){
+  while(touchRead(TOUCH3) > threshold){
     display.clearDisplay();
     display.setCursor(16, 10);
     display.setTextSize(2);
@@ -634,7 +664,7 @@ void printDate(){
   display.clearDisplay();
   display.setTextSize(2);
   int centra = (128 - (rtc.getTime("%A").length() * 12)) /2;
-  display.setCursor(centra-6,16);  
+  display.setCursor(centra,12);  
   display.print(rtc.getTime("%A"));
 
   display.setTextSize(2);
@@ -646,10 +676,10 @@ void printDate(){
 void printTemp() {
   display.clearDisplay();
   display.setTextSize(2);
-  display.setCursor(20,6);
+  display.setCursor(22,0);
   display.print("Weather");
   display.setTextSize(2);
-  display.setCursor(10,26);
+  display.setCursor(22,22);
   //display.print(t);
   display.print(climateSensor.getTemperatureCelcius());
   display.print(" C");
