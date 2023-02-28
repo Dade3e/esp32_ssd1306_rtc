@@ -289,13 +289,16 @@ void setup(){
     printTempoRimanente();
     delay(3000);
   }
-
+  unsigned long sec_wake_up = sec_rimanenti();
+  
   display.ssd1306_command(SSD1306_DISPLAYOFF);
 
-  esp_sleep_enable_touchpad_wakeup();
-
   if(svegliaAttiva)
-    esp_sleep_enable_timer_wakeup( sec_rimanenti() * uS_TO_S_FACTOR);
+    esp_sleep_enable_timer_wakeup( sec_wake_up * uS_TO_S_FACTOR);
+
+  esp_sleep_enable_touchpad_wakeup();
+  
+  delay(100);
 
   esp_deep_sleep_start();
 
@@ -308,8 +311,9 @@ void loop(){
 void orologio() {
   int wait = 0;
   int sens = 0;
-  while(stato != 0){
-    
+  int disabilita = 0;
+  while(stato != 0 && disabilita < (30*5) ){
+    disabilita++;
     //SVEGLIA
     if(rtc.getHour(true) == clock_H && rtc.getMinute() == clock_M && svegliaAttiva)
       stato = 13;
@@ -343,6 +347,7 @@ void orologio() {
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
+        disabilita = 0;
       }
       
     }
@@ -365,6 +370,7 @@ void orologio() {
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
+        disabilita = 0;
       }
     }
 
@@ -390,10 +396,12 @@ void orologio() {
         sens = sens * -1 + 1;
         wait = 0;
         waitRelease();
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
         stato = stato_tmp;
+        disabilita = 0;
       }
     }
 
@@ -419,6 +427,7 @@ void orologio() {
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
+        disabilita = 0;
       }
     }
 
@@ -441,6 +450,7 @@ void orologio() {
     }
 
     if(stato == 13){
+      disabilita = 0;
       printTime(1);
       bool heart = false;
       if(svegliaSuona){
@@ -810,11 +820,11 @@ void setDate(){
     display.setTextSize(1);
     display.setCursor(14, 12);
     display.print("R");
-    display.drawBitmap(14+7, 1, e_acc1, 8, 8, WHITE);
+    display.drawBitmap(14+7, 11, e_acc1, 8, 8, WHITE);
     display.setCursor(14+14, 12);
     display.print("gler la date");
 
-    display.setCursor(12, 36);
+    display.setCursor(8, 36);
     display.setTextSize(3);
     display.print("A:");
     if(touchRead(TOUCH2) < threshold){
