@@ -767,12 +767,12 @@ void setDate(){
     if(touchRead(TOUCH2) < threshold){
       tmp_d++;
       if(tmp_d>31)
-        tmp_d = 0;
+        tmp_d = 1;
     }
 
     if(touchRead(TOUCH1) < threshold){
       tmp_d--;
-      if(tmp_d < 0)
+      if(tmp_d <= 0)
         tmp_d = 31;
     }
 
