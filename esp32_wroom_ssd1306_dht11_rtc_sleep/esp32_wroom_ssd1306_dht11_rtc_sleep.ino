@@ -281,8 +281,6 @@ void setup(){
 
   stato = 1;
 
-  display.ssd1306_command(SSD1306_DISPLAYON);
-
   orologio();
 
   if(showLeft && svegliaAttiva){
@@ -309,9 +307,14 @@ void loop(){
 }
 
 void orologio() {
+  esp_sleep_wakeup_cause_t wakeup_reason;
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+  if(wakeup_reason == ESP_SLEEP_WAKEUP_TIMER && sec_rimanenti() > 120)
+    stato = 0;
   int wait = 0;
   int sens = 0;
   int disabilita = 0;
+  display.ssd1306_command(SSD1306_DISPLAYON);
   while(stato != 0 && disabilita < (30*5) ){
     disabilita++;
     //SVEGLIA
@@ -331,14 +334,17 @@ void orologio() {
 
       if(touchRead(TOUCH1) < threshold){
         stato_tmp = 0;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH2) < threshold){
         stato_tmp = 2;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH3) < threshold){
         stato_tmp = 10;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
@@ -347,7 +353,6 @@ void orologio() {
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
-        disabilita = 0;
       }
       
     }
@@ -358,38 +363,42 @@ void orologio() {
 
       if(touchRead(TOUCH1) < threshold){
         stato_tmp = 1;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH2) < threshold){
         stato_tmp = 3;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH3) < threshold){
         stato_tmp = 11;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
-        disabilita = 0;
       }
     }
 
     if(stato == 3){
       if(wait == 0)
         if(sens)
+          printTempDHT11(); 
+        else  
           printTempBMP280();
-        else
-          printTempDHT11();        
       wait++;
       if(wait >= 25)
         wait = 0;
 
       if(touchRead(TOUCH1) < threshold){
         stato_tmp = 2;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH2) < threshold){
         stato_tmp = 4;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH3) < threshold){
@@ -401,7 +410,6 @@ void orologio() {
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold){
         stato = stato_tmp;
-        disabilita = 0;
       }
     }
 
@@ -411,23 +419,26 @@ void orologio() {
 
       if(touchRead(TOUCH1) < threshold){
         stato_tmp = 3;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH2) < threshold){
         stato_tmp = 0;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH3) < threshold){
         stato_tmp = 12;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH1) < threshold && touchRead(TOUCH2) < threshold){
         stato_tmp = 20;
+        disabilita = 0;
       }
 
       if(touchRead(TOUCH1) > threshold && touchRead(TOUCH2) > threshold && touchRead(TOUCH3) > threshold){
         stato = stato_tmp;
-        disabilita = 0;
       }
     }
 
