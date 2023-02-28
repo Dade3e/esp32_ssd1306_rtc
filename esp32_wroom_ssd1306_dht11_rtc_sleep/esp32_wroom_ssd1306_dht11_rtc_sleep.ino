@@ -285,7 +285,6 @@ void setup(){
 
   orologio();
 
-  int sec_rim = sec_rimanenti();
   if(showLeft && svegliaAttiva){
     printTempoRimanente();
     delay(3000);
@@ -296,7 +295,7 @@ void setup(){
   esp_sleep_enable_touchpad_wakeup();
 
   if(svegliaAttiva)
-    esp_sleep_enable_timer_wakeup( sec_rim * uS_TO_S_FACTOR);
+    esp_sleep_enable_timer_wakeup( sec_rimanenti() * uS_TO_S_FACTOR);
 
   esp_deep_sleep_start();
 
@@ -317,7 +316,7 @@ void orologio() {
     else
       svegliaSuona = true;
     
-    if(stato == 1){  
+    if(stato == 1){
       if(wait == 0)
         printTime(sens);
       wait++;
