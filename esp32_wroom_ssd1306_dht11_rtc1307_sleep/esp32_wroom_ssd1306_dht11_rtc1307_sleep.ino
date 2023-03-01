@@ -110,6 +110,41 @@ B00010111, B11010000,
 B00000000, B00000000
 };
 
+const uint8_t PROGMEM clock32[]{
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00000000, B00000000, B00000000, B00000000, 
+B00001000, B00000000, B00000000, B10000000, 
+B00010000, B00011000, B11000000, B01000000, 
+B00100000, B00110000, B01100000, B00100000, 
+B00100000, B01101111, B10110000, B00100000, 
+B01000010, B01010000, B01010010, B00010000, 
+B01000100, B00100000, B00100001, B00010000, 
+B01000100, B01000010, B00010001, B00010000, 
+B01000100, B01000010, B00010001, B00010000, 
+B01000100, B01000010, B00010001, B00010000, 
+B01000100, B01000001, B00010001, B00010000, 
+B01000100, B01000000, B10010001, B00010000, 
+B01000100, B00100000, B00100001, B00010000, 
+B01000010, B00010000, B01000010, B00010000, 
+B00100000, B00101111, B10100000, B00100000, 
+B00100000, B00000000, B00000000, B00100000, 
+B00010000, B00000000, B00000000, B01000000, 
+B00001000, B00000000, B00000000, B10000000, 
+B00000000, B00000000, B00000000, B00000000
+};
+
 const uint8_t PROGMEM heart48_1[]{
 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 
 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 
@@ -467,7 +502,14 @@ void orologio() {
 
     if(stato == 13){
       disabilita = 0;
-      printTime(1);
+      if(wait == 0)
+        printTimeAlarm(sens);
+      wait++;
+      if(wait >= 4){
+        sens = sens * -1 + 1;
+        wait = 0;
+      }
+      
       bool heart = false;
       if(svegliaSuona){
         //for (int i=0;i< i < (sizeof(mySongNotes) / sizeof(mySongNotes[0])) -1; i++ ){
@@ -874,6 +916,33 @@ void printTime(bool sens){
   display.clearDisplay();
   if(svegliaAttiva && svegliaSuona)
     display.drawBitmap(52, -2, clock16, 16, 16, WHITE);
+  
+  display.setTextSize(4);
+  display.setCursor(2,26);
+  DateTime now = RTC.now();
+  if(sens){
+    if(now.hour() <10)
+      display.print("0");
+    display.print(now.hour());
+    display.print(":");
+    if(now.minute() <10)
+      display.print("0");
+    display.print(now.minute());
+  }else{
+    if(now.hour() <10)
+      display.print("0");
+    display.print(now.hour());
+    display.print(" ");
+    if(now.minute() <10)
+      display.print("0");
+    display.print(now.minute()); 
+  }
+  display.display();
+}
+
+void printTimeAlarm(bool sens){
+  display.clearDisplay();
+  display.drawBitmap(45, -12, clock32, 32, 32, WHITE);
   
   display.setTextSize(4);
   display.setCursor(2,26);
